@@ -8,41 +8,39 @@ public class SpeedControl implements Runnable {
     private final MotorControlBehavior motorControlBehavior; 
     private final ColorDetectionBehavior colorDetectionBehavior;
     private boolean suppressed = false;
-    private int previousSpeed;
+    private int previousSpeed = null;
 
     public SpeedControl(MotorControlBehavior motorControlBehavior, ColorDetectionBehavior colorDetectionBehavior) {
         this.motorControlBehavior = motorControlBehavior;
         this.colorDetectionBehavior = colorDetectionBehavior;
-        this.previousSpeed = motorControlBehavior.getSpeed(); //store the initial speed
     }
 
     private synchronized boolean takeControl() {
-        String detectedColor = colorDetectionBehavior.getDetectedColor();
-        
-        return detectedColor.equals("BLUE"); 
+        return colorDetectionBehavior.getDetectedColor().equals("BLUE");
     }
 
     private synchronized void action() {
         suppressed = false;
         int blueSpeed = 150; 
-        int currentSpeed = motorControlBehavior.getSpeed(); // Get current speed
 
         while (!suppressed) {
             String detectedColor = colorDetectionBehavior.getDetectedColor(); // Get current detected color
 
             if (detectedColor.equals("BLUE")) {
-                //if blue is detected, speed up to 150
-                if (currentSpeed != blueSpeed) {
-                    motorControlBehavior.setSpeed(blueSpeed);
+                if (previousSpeed == null) { // store previous speed only the first time
+                    previousSpeed = motorControlBehavior.getSpeed();
                 }
-            } else {
-                //blue is no longer detected, revert to the previous speed
-                if (currentSpeed != previousSpeed) {
-                    motorControlBehavior.setSpeed(previousSpeed);
-                }
+                motorControlBehavior.setSpeed(blueSpeed);
+            } else if (previousSpeed != null) {
+                motorControlBehavior.setSpeed(previousSpeed);
+                previousSpeed = null; // reset previousSpeed when reverting
             }
 
-            currentSpeed = motorControlBehavior.getSpeed(); //update current speed after the change
+            try {
+                Thread.sleep(50); // cpu help
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
         }
     }
 
@@ -50,10 +48,15 @@ public class SpeedControl implements Runnable {
         suppressed = true;
     }
 
-    public void run() { //this function is called by the Driver
+    public void run() {
         while (true) {
             if (takeControl()) {
                 action();
+            }
+            try {
+                Thread.sleep(50); // cooldown let other tasks run
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
             }
         }
     }
